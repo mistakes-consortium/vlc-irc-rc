@@ -143,6 +143,9 @@ static void Run(intf_thread_t *intf)
 
   sys->playlist = pl_Get(intf);
 
+  /* TODO: capture first play event ??? */
+  playlist_Pause(sys->playlist);
+
   EventLoop(fd, intf);
 
   free(sys->send_buffer);
