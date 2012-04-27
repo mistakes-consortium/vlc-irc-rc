@@ -149,6 +149,8 @@ static void Run(intf_thread_t *intf)
 
   /* TODO: capture first play event ??? */
   playlist_Pause(sys->playlist);
+  input_thread_t * input = playlist_CurrentInput(sys->playlist);
+  var_SetFloat(input, "position", 0.0);
 
   EventLoop(fd, intf);
 
