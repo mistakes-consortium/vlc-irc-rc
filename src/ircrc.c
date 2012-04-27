@@ -56,6 +56,7 @@ struct irc_msg_t *ParseIRC(char *);
 static void Run(intf_thread_t *intf);
 static int Playlist(vlc_object_t *, char const *, vlc_value_t, vlc_value_t, void *);
 static void RegisterCallbacks(intf_thread_t *);
+void FreeIRCMsg(struct irc_msg_t *irc_msg);
 
 vlc_module_begin()
     set_shortname("IRC")
@@ -261,7 +262,23 @@ void LineReceived(void *handle, char *line)
 
  line_error:
   free(line);
+  FreeIRCMsg(irc_msg);
   return;
+}
+
+void FreeIRCMsg(struct irc_msg_t *irc_msg)
+{
+  if(irc_msg) {
+    if(irc_msg->prefix)
+      free(irc_msg->prefix);
+    if(irc_msg->command)
+      free(irc_msg->command);
+    if(irc_msg->params)
+      free(irc_msg->params);
+    if(irc_msg->trailing)
+      free(irc_msg->trailing);
+    free(irc_msg);
+  }
 }
 
 void irc_PING(void *handle, struct irc_msg_t *irc_msg)
