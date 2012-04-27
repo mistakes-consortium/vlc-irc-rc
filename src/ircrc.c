@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <time.h>
 #include <poll.h>
@@ -283,12 +284,9 @@ void FreeIRCMsg(struct irc_msg_t *irc_msg)
 
 void irc_PING(void *handle, struct irc_msg_t *irc_msg)
 {
-  char pong[512];
-
-  strncat(pong, "PONG ", 512 * sizeof(char));
-  strncat(pong, irc_msg->trailing, 512 * sizeof(char));
-
-  SendBufferAppend(handle, pong);
+  SendBufferAppend(handle, "PONG :");
+  SendBufferAppend(handle, irc_msg->trailing);
+  SendBufferAppend(handle, "\r\n");
 }
 
 void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg)
