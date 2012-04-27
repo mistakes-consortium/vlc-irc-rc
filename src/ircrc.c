@@ -54,6 +54,8 @@ void SendBufferAppend(void *, char *);
 void ResizeSendBuffer(void *, int);
 struct irc_msg_t *ParseIRC(char *);
 static void Run(intf_thread_t *intf);
+static int Playlist(vlc_object_t *, char const *, vlc_value_t, vlc_value_t, void *);
+static void RegisterCallbacks(intf_thread_t *);
 
 vlc_module_begin()
     set_shortname("IRC")
@@ -125,6 +127,8 @@ static void Run(intf_thread_t *intf)
 
   msg_Info(intf, "Connected to server");
     
+  RegisterCallbacks(intf);
+
   /* initialize context */
   sys->fd = fd;
   sys->send_buffer_len = SEND_BUFFER_LEN;
@@ -275,26 +279,12 @@ void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg)
 
   char *msg = irc_msg->trailing;
 
-  /* TODO: refactor with callbacks i.e. var_Set etc */
-  input_thread_t *p_input = playlist_CurrentInput(sys->playlist);
-
-  if(strcmp(msg, ">pause") == 0) {
-    msg_Info(intf, "Pause");
-    
-    if(p_input && var_GetInteger(p_input, "state") == PLAYING_S)
-      playlist_Pause(sys->playlist);
-
-    if( p_input )
-      vlc_object_release( p_input );
-  } else if(strcmp(msg, ">play") == 0) {
-    msg_Info(intf, "Play");
-    input_thread_t *p_input =  playlist_CurrentInput(sys->playlist);
-
-    if(!p_input || var_GetInteger( p_input, "state" ) != PLAYING_S)
-      playlist_Play(sys->playlist);
-
-    if(p_input)
-      vlc_object_release( p_input );
+  if(msg[0] == '>') {
+    char *cmd = msg+1;
+    if(var_Type(intf, cmd) & VLC_VAR_ISCOMMAND) {
+      vlc_value_t val;
+      var_Set(intf, cmd, val);
+    }
   }
 }
 
@@ -367,3 +357,42 @@ struct irc_msg_t *ParseIRC(char *line)
   return irc_msg;
 }
 
+static void RegisterCallbacks(intf_thread_t *intf)
+{
+  /* Register commands that will be cleaned up upon object destruction */
+#define ADD( name, type, target )                                   \
+  var_Create(intf, name, VLC_VAR_ ## type | VLC_VAR_ISCOMMAND ); \
+  var_AddCallback(intf, name, target, NULL );
+    ADD("play", VOID, Playlist)
+    ADD("pause", VOID, Playlist)
+#undef ADD
+}
+
+static int Playlist(vlc_object_t *obj, char const *cmd,
+                    vlc_value_t oldval, vlc_value_t newval, void *p_data)
+{
+  intf_thread_t *intf = (intf_thread_t*)obj;
+  intf_sys_t *sys = intf->p_sys;
+
+  playlist_t *playlist = sys->playlist;
+  input_thread_t * input = playlist_CurrentInput(playlist);
+  int state;
+
+  if(input) {
+    state = var_GetInteger(input, "state");
+    vlc_object_release(input);
+  } else {
+    return VLC_EGENERIC;
+  }
+
+
+  if(strcmp(cmd, "pause") == 0) {
+    msg_Info(intf, "Pause");    
+    if(state == PLAYING_S)
+      playlist_Pause(sys->playlist);
+  } else if(strcmp(cmd, "play") == 0) {
+    msg_Info(intf, "Play");
+    if(input != PLAYING_S)
+      playlist_Play(sys->playlist);
+  }
+}
