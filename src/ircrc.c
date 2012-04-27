@@ -323,6 +323,7 @@ void ResizeSendBuffer(void *handle, int len)
   sys->send_buffer = (char *)realloc(sys->send_buffer, len * sizeof(char));  
 }
 
+/* im so sorry */
 struct irc_msg_t *ParseIRC(char *line)
 {
   struct irc_msg_t *irc_msg = (struct irc_msg_t *)malloc(sizeof(struct irc_msg_t));
@@ -336,7 +337,7 @@ struct irc_msg_t *ParseIRC(char *line)
     ch = strtok_r(line, " ", &sv_ptr); /* grab prefix */
     started = 1;
     if(ch != NULL)
-      irc_msg->prefix = strdup(ch); 
+      irc_msg->prefix = strdup(ch);
     else
       return NULL; /* malformed IRC message */
   }
@@ -354,10 +355,15 @@ struct irc_msg_t *ParseIRC(char *line)
     ch = strtok_r(NULL, ":", &sv_ptr);
     if(ch != NULL)
       irc_msg->trailing = strdup(ch); /* gram trailing */
+    else { /* theres only one token, must be trailing */
+      irc_msg->trailing = irc_msg->params;
+      irc_msg->params = NULL;
+    }
   } else {
-    ch = strtok_r(NULL, "", &sv_ptr); 
+    ch = strtok_r(NULL, "", &sv_ptr);
     irc_msg->params = strdup(ch); /* grab params */
   }
 
   return irc_msg;
 }
+
