@@ -387,14 +387,13 @@ static int Playlist(vlc_object_t *obj, char const *cmd,
     return VLC_EGENERIC;
   }
 
-
   if(strcmp(cmd, "pause") == 0) {
     msg_Info(intf, "Pause");    
     if(state == PLAYING_S)
       playlist_Pause(sys->playlist);
   } else if(strcmp(cmd, "play") == 0) {
     msg_Info(intf, "Play");
-    if(input != PLAYING_S)
+    if(state != PLAYING_S)
       playlist_Play(sys->playlist);
   }
 }
