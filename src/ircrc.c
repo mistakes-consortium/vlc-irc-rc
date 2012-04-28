@@ -118,6 +118,8 @@ static void Run(intf_thread_t *intf)
   intf_sys_t *sys = intf->p_sys;
   int fd;
 
+  int canc = vlc_savecancel();
+
   msg_Info(intf, "Creating IRC connection...");
 
   fd = net_ConnectTCP(VLC_OBJECT(intf), sys->server, 6667);
@@ -158,6 +160,8 @@ static void Run(intf_thread_t *intf)
 
   free(sys->send_buffer);
   free(sys);
+
+  vlc_restorecancel(canc);
 }
 
 void EventLoop(int fd, void *handle)
