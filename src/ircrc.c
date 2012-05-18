@@ -52,7 +52,7 @@ void LineReceived(void *, char *);
 void irc_PING(void *, struct irc_msg_t *);
 void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg);
 void SendBufferAppend(void *, char *);
-void ResizeSendBuffer(void *, int);
+void ResizeSendBuffer(void *);
 struct irc_msg_t *ParseIRC(char *);
 static void Run(intf_thread_t *intf);
 static int Playlist(vlc_object_t *, char const *, vlc_value_t, vlc_value_t, void *);
@@ -178,10 +178,10 @@ void EventLoop(int fd, void *handle)
       continue;
     
     if(ufd.revents & POLLIN) {
-      int rv = HandleRead(handle);
+	  int rv = HandleRead(handle);
       if(rv != 0) {
-	msg_Err(intf, "Read error: %s", strerror(rv));
-	break;
+		msg_Err(intf, "Read error: %s", strerror(rv));
+		break;
       }
     } else if(ufd.revents & POLLOUT) {
       int rv = HandleWrite(handle);
@@ -220,23 +220,16 @@ int HandleWrite(void *handle)
 {
   intf_thread_t *intf = (intf_thread_t*)handle;
   intf_sys_t *sys = intf->p_sys;
-
-  int send_len = sys->send_buffer_loc-sys->send_buffer_sent;
-
-  if(send_len == 0)
-    return 0;
-
-  int sent = send(sys->fd, sys->send_buffer+sys->send_buffer_sent, send_len, 0);
+  
+  int sent = send(sys->fd, sys->send_buffer, send_len, 0);
 
   if(sent == -1)
     return errno;
 
-  if(sys->send_buffer_sent+sent == sys->send_buffer_len) { /* full buffer is sent */
-    sys->send_buffer_loc = 0;
-    ResizeSendBuffer(handle, SEND_BUFFER_LEN);
-  } else {
-    sys->send_buffer_sent += sent;
-  }
+  sys->send_buffer_len -= sent;
+  
+  memcpy(sys->send_buffer, sys->send_buffer+sent, sys->send_buffer_len);
+  ResizeSendBuffer(handle);
 
   return 0;
 }
@@ -318,19 +311,19 @@ void SendBufferAppend(void *handle, char *string)
 
   int new_len = sys->send_buffer_loc + strlen(string);
   if(sys->send_buffer_len < new_len) {
-    ResizeSendBuffer(handle, new_len);
+	sys->send_buffer_len = new_len;
+    ResizeSendBuffer(handle);
   }
 
   memcpy(sys->send_buffer+sys->send_buffer_loc, string, strlen(string) * sizeof(char));
   sys->send_buffer_loc += strlen(string);
 }
 
-void ResizeSendBuffer(void *handle, int len)
+void ResizeSendBuffer(void *handle)
 {
   intf_thread_t *intf = (intf_thread_t*)handle;
   intf_sys_t *sys = intf->p_sys;
   
-  sys->send_buffer_len = len;
   sys->send_buffer = (char *)realloc(sys->send_buffer, len * sizeof(char));  
 }
 
