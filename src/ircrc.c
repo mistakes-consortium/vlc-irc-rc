@@ -29,7 +29,6 @@ struct intf_sys_t
   char *send_buffer;
   int send_buffer_len;
   int send_buffer_loc;
-  int send_buffer_sent;
 
   playlist_t *playlist;
 
@@ -138,7 +137,6 @@ static void Run(intf_thread_t *intf)
   sys->send_buffer_len = SEND_BUFFER_LEN;
   sys->send_buffer = (char *)malloc(SEND_BUFFER_LEN * sizeof(char));
   sys->send_buffer_loc = 0;
-  sys->send_buffer_sent = 0;
   sys->line_loc = 0;
 
   SendBufferAppend(intf, "NICK ");
@@ -227,7 +225,8 @@ int HandleWrite(void *handle)
     return errno;
 
   sys->send_buffer_len -= sent;
-  
+  sys->send_buffer_loc -= sent;
+
   memcpy(sys->send_buffer, sys->send_buffer+sent, sys->send_buffer_len);
   ResizeSendBuffer(handle);
 
