@@ -10,7 +10,7 @@ I removed the Makefile because out-of-tree compilation was too finnicky and
 I couldn't come up with build instructions that worked consistently across
 distros.
 
-* Download the latest VLC sources (http://www.videolan.org/vlc/download-sources.html) and build dependenices
+* Download the latest VLC sources (http://www.videolan.org/vlc/download-sources.html) and install its build dependenices
 
 * Extract and build vlc (./configure && ./compile)
 
