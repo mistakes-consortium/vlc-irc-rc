@@ -10,6 +10,9 @@ I removed the Makefile because out-of-tree compilation was too finnicky and
 I couldn't come up with build instructions that worked consistently across
 distros.
 
+(Note: `#define STOP_HACK' to enable code to seek 0:00 and pause on start. 
+This is a hack, if you start vlc without a file in its playlist with this enabled, it will crash)
+
 * Download the latest VLC sources (http://www.videolan.org/vlc/download-sources.html) and install its build dependenices
 
 * Extract and build vlc (./configure && ./compile)
