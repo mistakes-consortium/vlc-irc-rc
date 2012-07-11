@@ -44,7 +44,7 @@ usage
 -----
 
 <pre>
-vlc -I irc --server your.irc.server --channel "#yourchannel" --nick
+vlc -I ircrc --server your.irc.server --channel "#yourchannel" --nick
 some_nickname yourfile.avi
 </pre>
 
