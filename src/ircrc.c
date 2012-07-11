@@ -11,7 +11,6 @@
 #include <vlc_network.h>
 #include <vlc_playlist.h>
 
-#define MODULE_STRING "irc"
 #define MAX_LINE 8096
 #define SEND_BUFFER_LEN 8096
 
@@ -29,7 +28,6 @@ struct intf_sys_t
   char *send_buffer;
   int send_buffer_len;
   int send_buffer_loc;
-  int send_buffer_sent;
 
   playlist_t *playlist;
 
@@ -52,7 +50,7 @@ void LineReceived(void *, char *);
 void irc_PING(void *, struct irc_msg_t *);
 void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg);
 void SendBufferAppend(void *, char *);
-void ResizeSendBuffer(void *, int);
+void ResizeSendBuffer(void *);
 struct irc_msg_t *ParseIRC(char *);
 static void Run(intf_thread_t *intf);
 static int Playlist(vlc_object_t *, char const *, vlc_value_t, vlc_value_t, void *);
@@ -120,45 +118,50 @@ static void Run(intf_thread_t *intf)
 
   int canc = vlc_savecancel();
 
-  msg_Info(intf, "Creating IRC connection...");
-
-  fd = net_ConnectTCP(VLC_OBJECT(intf), sys->server, 6667);
-
-  if(fd == -1) {
-    msg_Err(intf, "Error connecting to server");
-    return;
-  }
-
-  msg_Info(intf, "Connected to server");
-    
   RegisterCallbacks(intf);
 
-  /* initialize context */
-  sys->fd = fd;
-  sys->send_buffer_len = SEND_BUFFER_LEN;
-  sys->send_buffer = (char *)malloc(SEND_BUFFER_LEN * sizeof(char));
-  sys->send_buffer_loc = 0;
-  sys->send_buffer_sent = 0;
-  sys->line_loc = 0;
+  while(1) {
+    msg_Info(intf, "Creating IRC connection...");
 
-  SendBufferAppend(intf, "NICK ");
-  SendBufferAppend(intf, sys->nick);
-  SendBufferAppend(intf, "\r\n");
+    fd = net_ConnectTCP(VLC_OBJECT(intf), sys->server, 6667);
+
+    if(fd == -1) {
+      msg_Err(intf, "Error connecting to server");
+      return;
+    }
+
+    msg_Info(intf, "Connected to server");
+
+    /* initialize context */
+    sys->fd = fd;
+    sys->send_buffer_len = 0;
+    sys->send_buffer = (char *)malloc(SEND_BUFFER_LEN * sizeof(char));
+    sys->send_buffer_loc = 0;
+    sys->line_loc = 0;
+
+    SendBufferAppend(intf, "NICK ");
+    SendBufferAppend(intf, sys->nick);
+    SendBufferAppend(intf, "\r\n");
   
-  SendBufferAppend(intf, "USER ");
-  SendBufferAppend(intf, sys->nick);
-  SendBufferAppend(intf, " 8 * vlc\r\n");
+    SendBufferAppend(intf, "USER ");
+    SendBufferAppend(intf, sys->nick);
+    SendBufferAppend(intf, " 8 * vlc\r\n");
 
-  sys->playlist = pl_Get(intf);
+    sys->playlist = pl_Get(intf);
 
-  /* TODO: capture first play event ??? */
-  playlist_Pause(sys->playlist);
-  input_thread_t * input = playlist_CurrentInput(sys->playlist);
-  var_SetFloat(input, "position", 0.0);
+    #ifdef STOP_HACK
+    playlist_Pause(sys->playlist);
+    input_thread_t * input = playlist_CurrentInput(sys->playlist);
+    var_SetFloat(input, "position", 0.0);
+    #endif
 
-  EventLoop(fd, intf);
+    EventLoop(fd, intf);
 
-  free(sys->send_buffer);
+    free(sys->send_buffer);
+
+    sleep(30);
+  }
+
   free(sys);
 
   vlc_restorecancel(canc);
@@ -220,23 +223,20 @@ int HandleWrite(void *handle)
 {
   intf_thread_t *intf = (intf_thread_t*)handle;
   intf_sys_t *sys = intf->p_sys;
-
-  int send_len = sys->send_buffer_loc-sys->send_buffer_sent;
-
-  if(send_len == 0)
-    return 0;
-
-  int sent = send(sys->fd, sys->send_buffer+sys->send_buffer_sent, send_len, 0);
+  
+  int sent = send(sys->fd, sys->send_buffer, sys->send_buffer_len, 0);
 
   if(sent == -1)
     return errno;
 
-  if(sys->send_buffer_sent+sent == sys->send_buffer_len) { /* full buffer is sent */
-    sys->send_buffer_loc = 0;
-    ResizeSendBuffer(handle, SEND_BUFFER_LEN);
-  } else {
-    sys->send_buffer_sent += sent;
-  }
+  if(sent == 0)
+    return 0;
+
+  sys->send_buffer_len -= sent;
+  sys->send_buffer_loc -= sent;
+
+  memcpy(sys->send_buffer, sys->send_buffer+sent, sys->send_buffer_len);
+  ResizeSendBuffer(handle);
 
   return 0;
 }
@@ -316,22 +316,22 @@ void SendBufferAppend(void *handle, char *string)
 
   msg_Dbg(intf, "Sending %s", string);
 
-  int new_len = sys->send_buffer_loc + strlen(string);
-  if(sys->send_buffer_len < new_len) {
-    ResizeSendBuffer(handle, new_len);
+  int new_len = sys->send_buffer_len + strlen(string);
+  if(sys->send_buffer_len < SEND_BUFFER_LEN) {
+    sys->send_buffer_len = new_len;
+    ResizeSendBuffer(handle);
   }
 
   memcpy(sys->send_buffer+sys->send_buffer_loc, string, strlen(string) * sizeof(char));
   sys->send_buffer_loc += strlen(string);
 }
 
-void ResizeSendBuffer(void *handle, int len)
+void ResizeSendBuffer(void *handle)
 {
   intf_thread_t *intf = (intf_thread_t*)handle;
   intf_sys_t *sys = intf->p_sys;
   
-  sys->send_buffer_len = len;
-  sys->send_buffer = (char *)realloc(sys->send_buffer, len * sizeof(char));  
+  sys->send_buffer = (char *)realloc(sys->send_buffer, sys->send_buffer_len * sizeof(char));  
 }
 
 /* im so sorry */
