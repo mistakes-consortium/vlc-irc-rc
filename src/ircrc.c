@@ -147,9 +147,8 @@ static void Run(intf_thread_t *intf)
     SendBufferAppend(intf, sys->nick);
     SendBufferAppend(intf, " 8 * vlc\r\n");
 
-    sys->playlist = pl_Get(intf);
-
     #ifdef STOP_HACK
+    sys->playlist = pl_Get(intf);
     playlist_Pause(sys->playlist);
     input_thread_t * input = playlist_CurrentInput(sys->playlist);
     var_SetFloat(input, "position", 0.0);
@@ -194,6 +193,8 @@ void EventLoop(int fd, void *handle)
       }
     }
   }
+
+  free(sys->line);
 }
 
 int HandleRead(void *handle) {
@@ -202,8 +203,11 @@ int HandleRead(void *handle) {
 
   static char ch, pch;
 
-  if(recv(sys->fd, &ch, 1, 0) == -1)
+  int rv = recv(sys->fd, &ch, 1, 0);
+  if(rv == -1)
     return errno;
+  else if(rv == 0)
+    return -2;
   
   if(pch == '\r' && ch == '\n') { /* were the last two characters \r\n? */
     sys->line[sys->line_loc-1] = '\0'; /* overwrite CR with a nullbyte */
