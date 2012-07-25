@@ -15,7 +15,7 @@ This is a hack, if you start vlc without a file in its playlist with this enable
 
 * Download the latest VLC sources (http://www.videolan.org/vlc/download-sources.html) and install its build dependenices
 
-* Extract and build vlc (./configure && ./compile)
+* Extract vlc and run ./configure
 
 * Copy src/ircrc.c to modules/control/ in the vlc source directory
 
@@ -25,20 +25,15 @@ Add
 
 <pre>
 SOURCES_ircrc = ircrc.c
-</pre>
-
-With the rest of the SOURCES_* defines, and add
-
-<pre>
 libvlc_LTLIBRARIES += \
         libircrc_plugin.la
 </pre>
 
 To the end.
 
-* Run `make clean' in modules/control
+* Run ./bootstrap in the vlc directory
 
-* Now run `make' in the root of the vlc source folder (:
+* Now run ./configure && make
 
 usage
 -----
