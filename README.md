@@ -6,6 +6,10 @@ Control your VLC with your IRC, bro.
 building
 --------
 
+I've included build.sh, which does all of this, very poorly. There's no error
+tolerance or anything of that sort. Worst case, it should at least clearly
+demonstrate the build procedure.
+
 I removed the Makefile because out-of-tree compilation was too finnicky and
 I couldn't come up with build instructions that worked consistently across
 distros.
