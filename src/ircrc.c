@@ -20,7 +20,7 @@ struct intf_sys_t
   int timeout;
   
   input_thread_t *input;
-  vlc_thread_t irc_thread;
+  vlc_thread_t thread;
 
   char *line;
   int line_loc;
@@ -96,7 +96,9 @@ static int Open(vlc_object_t *obj)
       return VLC_SUCCESS;
     }
 
-    intf->pf_run = Run;
+    if(vlc_clone(&sys->thread, Run, intf, VLC_THREAD_PRIORITY_LOW)) {
+      return VLC_ENOMEM;
+    }
 
     return VLC_SUCCESS;
 }
