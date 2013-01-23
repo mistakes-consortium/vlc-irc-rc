@@ -14,6 +14,13 @@
 #define MAX_LINE 8096
 #define SEND_BUFFER_LEN 8096
 
+struct circular_buffer {
+  void *buffer;
+  void *buffer_end;
+  void *head;
+  void *tail;
+};
+
 struct intf_sys_t
 {
   int fd;
@@ -25,7 +32,7 @@ struct intf_sys_t
   char *line;
   int line_loc;
 
-  char *send_buffer;
+  struct circular_buffer* send_buffer;
   int send_buffer_len;
   int send_buffer_loc;
 
@@ -41,6 +48,7 @@ struct irc_msg_t {
   char *trailing;
 };
 
+
 static int Open(vlc_object_t *);
 static void Close(vlc_object_t *);
 void EventLoop(int, void *);
@@ -52,6 +60,7 @@ void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg);
 void SendBufferAppend(void *, char *);
 void ResizeSendBuffer(void *);
 struct irc_msg_t *ParseIRC(char *);
+void SendBufferInit(vlc_object_t *obj);
 static void Run(intf_thread_t *intf);
 static int Playlist(vlc_object_t *, char const *, vlc_value_t, vlc_value_t, void *);
 static void RegisterCallbacks(intf_thread_t *);
@@ -136,21 +145,21 @@ static void Run(intf_thread_t *intf)
 
     /* initialize context */
     sys->fd = fd;
-    sys->send_buffer_len = 0;
-    sys->send_buffer = (char *)malloc(SEND_BUFFER_LEN * sizeof(char));
-    sys->send_buffer_loc = 0;
     sys->line_loc = 0;
+
+    SendBufferInit(intf);
 
     SendBufferAppend(intf, "NICK ");
     SendBufferAppend(intf, sys->nick);
     SendBufferAppend(intf, "\r\n");
-  
+
     SendBufferAppend(intf, "USER ");
     SendBufferAppend(intf, sys->nick);
     SendBufferAppend(intf, " 8 * vlc\r\n");
 
-    #ifdef STOP_HACK
     sys->playlist = pl_Get(intf);
+
+    #ifdef STOP_HACK
     playlist_Pause(sys->playlist);
     input_thread_t * input = playlist_CurrentInput(sys->playlist);
     var_SetFloat(input, "position", 0.0);
@@ -158,7 +167,7 @@ static void Run(intf_thread_t *intf)
 
     EventLoop(fd, intf);
 
-    free(sys->send_buffer);
+    free(sys->send_buffer->buffer);
 
     sleep(30);
   }
@@ -230,7 +239,11 @@ int HandleWrite(void *handle)
   intf_thread_t *intf = (intf_thread_t*)handle;
   intf_sys_t *sys = intf->p_sys;
   
-  int sent = send(sys->fd, sys->send_buffer, sys->send_buffer_len, 0);
+  struct circular_buffer* send_buffer = sys->send_buffer;
+
+  size_t send_len = (send_buffer->tail > send_buffer->head) ? (SEND_BUFFER_LEN - (long)send_buffer->tail) : (send_buffer->head - send_buffer->tail);
+
+  int sent = send(sys->fd, send_buffer->tail, send_len, 0);
 
   if(sent == -1)
     return errno;
@@ -238,11 +251,11 @@ int HandleWrite(void *handle)
   if(sent == 0)
     return 0;
 
-  sys->send_buffer_len -= sent;
-  sys->send_buffer_loc -= sent;
+  send_buffer->tail += sent;
 
-  memcpy(sys->send_buffer, sys->send_buffer+sent, sys->send_buffer_len);
-  ResizeSendBuffer(handle);
+  if(send_buffer->tail == SEND_BUFFER_LEN) {
+    send_buffer->tail = send_buffer->buffer;
+  }
 
   return 0;
 }
@@ -315,23 +328,7 @@ void irc_PRIVMSG(void *handle, struct irc_msg_t *irc_msg)
   }
 }
 
-void SendBufferAppend(void *handle, char *string)
-{
-  intf_thread_t *intf = (intf_thread_t*)handle;
-  intf_sys_t *sys = intf->p_sys;
-
-  msg_Dbg(intf, "Sending %s", string);
-
-  int new_len = sys->send_buffer_len + strlen(string);
-  if(sys->send_buffer_len < SEND_BUFFER_LEN) {
-    sys->send_buffer_len = new_len;
-    ResizeSendBuffer(handle);
-  }
-
-  memcpy(sys->send_buffer+sys->send_buffer_loc, string, strlen(string) * sizeof(char));
-  sys->send_buffer_loc += strlen(string);
-}
-
+/*
 void ResizeSendBuffer(void *handle)
 {
   intf_thread_t *intf = (intf_thread_t*)handle;
@@ -339,6 +336,7 @@ void ResizeSendBuffer(void *handle)
   
   sys->send_buffer = (char *)realloc(sys->send_buffer, sys->send_buffer_len * sizeof(char));  
 }
+*/
 
 /* im so sorry */
 struct irc_msg_t *ParseIRC(char *line)
@@ -420,5 +418,40 @@ static int Playlist(vlc_object_t *obj, char const *cmd,
     msg_Info(intf, "Play");
     if(state != PLAYING_S)
       playlist_Play(sys->playlist);
+  }
+}
+
+void SendBufferInit(vlc_object_t *obj)
+{
+  intf_thread_t *intf = (intf_thread_t*)obj;
+  intf_sys_t *sys = intf->p_sys;
+
+  sys->send_buffer = (struct circular_buffer*)malloc(sizeof(struct circular_buffer));
+
+  struct circular_buffer *send_buffer = sys->send_buffer;
+
+  send_buffer->buffer = (void *)malloc(SEND_BUFFER_LEN);
+  send_buffer->buffer_end = (void *)send_buffer->buffer+SEND_BUFFER_LEN;
+  send_buffer->head = send_buffer->buffer;
+  send_buffer->tail = send_buffer->buffer;
+}
+
+void SendBufferAppend(void *handle, char *data)
+{
+  intf_thread_t *intf = (intf_thread_t*)handle;
+  intf_sys_t *sys = intf->p_sys;
+
+  size_t data_len = strlen(data);
+
+  struct circular_buffer *send_buffer = sys->send_buffer;
+
+  if(send_buffer->head + data_len > send_buffer->buffer_end) {
+    size_t copy_len = (send_buffer->buffer_end - send_buffer->tail);
+    memcpy(send_buffer->head, data, copy_len);
+    memcpy(send_buffer->buffer, data + copy_len, data_len - copy_len);
+    send_buffer->head = send_buffer->buffer + (data_len - copy_len);
+  } else {
+    memcpy(send_buffer->head, data, data_len);
+    send_buffer->head += data_len;
   }
 }
